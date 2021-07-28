@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/PaesslerAG/gval"
-	"github.com/PaesslerAG/jsonpath"
+	"github.com/ngjaying/jsonpath"
 )
 
 type jsonpathTest struct {
