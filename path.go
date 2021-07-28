@@ -14,13 +14,13 @@ type plainPath []plainSelector
 type ambiguousMatcher func(key, v interface{})
 
 func (p plainPath) evaluate(ctx context.Context, root interface{}) (interface{}, error) {
-	return p.evaluatePath(ctx, root, root)
+	return p.evaluatePath(ctx, root, root, nil)
 }
 
-func (p plainPath) evaluatePath(ctx context.Context, root, value interface{}) (interface{}, error) {
+func (p plainPath) evaluatePath(ctx context.Context, root, value, key interface{}) (interface{}, error) {
 	var err error
 	for _, sel := range p {
-		value, err = sel(ctx, root, value)
+		value, err = sel(ctx, root, value, key)
 		if err != nil {
 			return nil, err
 		}
@@ -33,7 +33,7 @@ func (p plainPath) matcher(ctx context.Context, r interface{}, match ambiguousMa
 		return match
 	}
 	return func(k, v interface{}) {
-		res, err := p.evaluatePath(ctx, r, v)
+		res, err := p.evaluatePath(ctx, r, v, k)
 		if err == nil {
 			match(k, res)
 		}
@@ -41,7 +41,7 @@ func (p plainPath) matcher(ctx context.Context, r interface{}, match ambiguousMa
 }
 
 func (p plainPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
-	res, err := p.evaluatePath(ctx, r, r)
+	res, err := p.evaluatePath(ctx, r, r, nil)
 	if err == nil {
 		visit(nil, res)
 	}
@@ -73,13 +73,13 @@ func (p *ambiguousPath) evaluate(ctx context.Context, parameter interface{}) (in
 
 func (p *ambiguousPath) visitMatchs(ctx context.Context, r interface{}, visit pathMatcher) {
 	p.parent.visitMatchs(ctx, r, func(keys []interface{}, v interface{}) {
-		p.branch(ctx, r, v, p.ending.matcher(ctx, r, visit.matcher(keys)))
+		p.branch(ctx, r, v, nil, p.ending.matcher(ctx, r, visit.matcher(keys)))
 	})
 }
 
 func (p *ambiguousPath) branchMatcher(ctx context.Context, r interface{}, m ambiguousMatcher) ambiguousMatcher {
 	return func(k, v interface{}) {
-		p.branch(ctx, r, v, m)
+		p.branch(ctx, r, v, nil, m)
 	}
 }
 

@@ -9,14 +9,14 @@ import (
 )
 
 //plainSelector evaluate exactly one result
-type plainSelector func(c context.Context, r, v interface{}) (interface{}, error)
+type plainSelector func(c context.Context, r, v, k interface{}) (interface{}, error)
 
 //ambiguousSelector evaluate wildcard
-type ambiguousSelector func(c context.Context, r, v interface{}, match ambiguousMatcher)
+type ambiguousSelector func(c context.Context, r, v, k interface{}, match ambiguousMatcher)
 
 //@
 func currentElementSelector() plainSelector {
-	return func(c context.Context, r, v interface{}) (interface{}, error) {
+	return func(c context.Context, r, v, _ interface{}) (interface{}, error) {
 		return c.Value(currentElement{}), nil
 	}
 }
@@ -29,9 +29,9 @@ func currentContext(c context.Context, v interface{}) context.Context {
 
 //.x, [x]
 func directSelector(key gval.Evaluable) plainSelector {
-	return func(c context.Context, r, v interface{}) (interface{}, error) {
+	return func(c context.Context, r, v, k interface{}) (interface{}, error) {
 
-		e, _, err := selectValue(c, key, r, v)
+		e, _, err := selectValue(c, key, r, v, k)
 		if err != nil {
 			return nil, err
 		}
@@ -42,7 +42,7 @@ func directSelector(key gval.Evaluable) plainSelector {
 
 // * / [*]
 func starSelector() ambiguousSelector {
-	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
+	return func(c context.Context, r, v, _ interface{}, match ambiguousMatcher) {
 		visitAll(v, func(key string, val interface{}) { match(key, val) })
 	}
 }
@@ -52,9 +52,9 @@ func multiSelector(keys []gval.Evaluable) ambiguousSelector {
 	if len(keys) == 0 {
 		return starSelector()
 	}
-	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
-		for _, k := range keys {
-			e, wildcard, err := selectValue(c, k, r, v)
+	return func(c context.Context, r, v, k interface{}, match ambiguousMatcher) {
+		for _, key := range keys {
+			e, wildcard, err := selectValue(c, key, r, v, k)
 			if err != nil {
 				continue
 			}
@@ -63,7 +63,7 @@ func multiSelector(keys []gval.Evaluable) ambiguousSelector {
 	}
 }
 
-func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value interface{}, jkey string, err error) {
+func selectValue(c context.Context, key gval.Evaluable, r, v, k interface{}) (value interface{}, jkey string, err error) {
 	c = currentContext(c, v)
 	switch o := v.(type) {
 	case []interface{}:
@@ -76,15 +76,17 @@ func selectValue(c context.Context, key gval.Evaluable, r, v interface{}) (value
 		}
 		return o[i], strconv.Itoa(i), nil
 	case map[string]interface{}:
-		k, err := key.EvalString(c, r)
+		ks, err := key.EvalString(c, r)
 		if err != nil {
 			return nil, "", fmt.Errorf("could not select value, invalid key: %s", err)
 		}
-
-		if r, ok := o[k]; ok {
-			return r, k, nil
+		if ks == "__key" && k != nil {
+			return k, ks, nil
 		}
-		return nil, "", fmt.Errorf("unknown key %s", k)
+		if r, ok := o[ks]; ok {
+			return r, ks, nil
+		}
+		return nil, "", fmt.Errorf("unknown key %s", ks)
 
 	default:
 		return nil, "", fmt.Errorf("unsupported value type %T for select, expected map[string]interface{} or []interface{}", o)
@@ -96,10 +98,10 @@ func mapperSelector() ambiguousSelector {
 	return mapper
 }
 
-func mapper(c context.Context, r, v interface{}, match ambiguousMatcher) {
+func mapper(c context.Context, r, v, _ interface{}, match ambiguousMatcher) {
 	match([]interface{}{}, v)
 	visitAll(v, func(wildcard string, v interface{}) {
-		mapper(c, r, v, func(key interface{}, v interface{}) {
+		mapper(c, r, v, nil, func(key interface{}, v interface{}) {
 			match(append([]interface{}{wildcard}, key.([]interface{})...), v)
 		})
 	})
@@ -122,7 +124,7 @@ func visitAll(v interface{}, visit func(key string, v interface{})) {
 
 //[? ]
 func filterSelector(filter gval.Evaluable) ambiguousSelector {
-	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
+	return func(c context.Context, r, v, _ interface{}, match ambiguousMatcher) {
 		visitAll(v, func(wildcard string, v interface{}) {
 			condition, err := filter.EvalBool(currentContext(c, v), r)
 			if err != nil {
@@ -137,7 +139,7 @@ func filterSelector(filter gval.Evaluable) ambiguousSelector {
 
 //[::]
 func rangeSelector(min, max, step gval.Evaluable) ambiguousSelector {
-	return func(c context.Context, r, v interface{}, match ambiguousMatcher) {
+	return func(c context.Context, r, v, _ interface{}, match ambiguousMatcher) {
 		cs, ok := v.([]interface{})
 		if !ok {
 			return
@@ -197,7 +199,7 @@ func negmax(n, max int) int {
 
 // ()
 func newScript(script gval.Evaluable) plainSelector {
-	return func(c context.Context, r, v interface{}) (interface{}, error) {
+	return func(c context.Context, r, v, _ interface{}) (interface{}, error) {
 		return script(currentContext(c, v), r)
 	}
 }

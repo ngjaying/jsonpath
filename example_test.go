@@ -65,7 +65,7 @@ func ExampleGet_filter() {
 		{"key":"c","value" : "III"}
 		]`), &v)
 
-	values, err := jsonpath.Get(`$[? @.key=="b"].value`, v)
+	values, err := jsonpath.Get(`$[? @.key=="b"].__key`, v)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -76,7 +76,7 @@ func ExampleGet_filter() {
 	}
 
 	// Output:
-	// II
+	// 1
 }
 
 func Example_gval() {
